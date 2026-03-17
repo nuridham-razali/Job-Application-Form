@@ -1,0 +1,121 @@
+{
+  "entities": {
+    "Application": {
+      "title": "Application",
+      "description": "A job application submitted by a candidate.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "positionApplied": { "type": "string" },
+        "expectedSalary": { "type": "string" },
+        "name": { "type": "string" },
+        "icNo": { "type": "string" },
+        "birthDate": { "type": "string" },
+        "age": { "type": "string" },
+        "birthPlace": { "type": "string" },
+        "gender": { "type": "string" },
+        "maritalStatus": { "type": "string" },
+        "race": { "type": "string" },
+        "religion": { "type": "string" },
+        "address": { "type": "string" },
+        "phoneNo": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "emergencyName": { "type": "string" },
+        "emergencyRelationship": { "type": "string" },
+        "emergencyPhone": { "type": "string" },
+        "emergencyAddress": { "type": "string" },
+        "education": { "type": "string" },
+        "employmentHistory": { "type": "string" },
+        "languages": { "type": "string" },
+        "references": { "type": "string" },
+        "relatives": { "type": "string" },
+        "illness": { "type": "string" },
+        "illnessDetails": { "type": "string" },
+        "medication": { "type": "string" },
+        "medicationDetails": { "type": "string" },
+        "allergies": { "type": "string" },
+        "allergiesDetails": { "type": "string" },
+        "dismissed": { "type": "string" },
+        "dismissedDetails": { "type": "string" },
+        "criminal": { "type": "string" },
+        "criminalDetails": { "type": "string" },
+        "business": { "type": "string" },
+        "businessDetails": { "type": "string" },
+        "startWork": { "type": "string" },
+        "noticePeriod": { "type": "string" },
+        "noticePeriodUnit": { "type": "string" },
+        "ownTransport": { "type": "string" },
+        "transfer": { "type": "string" },
+        "outstation": { "type": "string" },
+        "overtime": { "type": "string" },
+        "outsideHours": { "type": "string" },
+        "abroad": { "type": "string" },
+        "shortNotice": { "type": "string" },
+        "noSupervision": { "type": "string" },
+        "currentSalary": { "type": "string" },
+        "signatureName": { "type": "string" },
+        "signatureDate": { "type": "string" },
+        
+        "status": { "type": "string", "enum": ["pending", "kiv", "accept", "reject"] },
+        "pdfUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        
+        "officeUse": {
+          "type": "object",
+          "properties": {
+            "interviewDate": { "type": "string" },
+            "interviewer1": { "type": "string" },
+            "interviewer2": { "type": "string" },
+            "interviewer3": { "type": "string" },
+            "interviewer4": { "type": "string" },
+            "interviewer5": { "type": "string" },
+            "result": { "type": "string", "enum": ["Terima/Accept", "Tolak/Reject", "KIV", ""] },
+            "company": { "type": "string", "enum": ["Halagel (M) Sdn Bhd", "Halagel Plant (M) Sdn Bhd", "Halagel Products Sdn Bhd", ""] },
+            "dateStartWork": { "type": "string" },
+            "position": { "type": "string" },
+            "department": { "type": "string" },
+            "startingBasic": { "type": "string" },
+            "socsoNo": { "type": "string" },
+            "epfNo": { "type": "string" }
+          }
+        }
+      },
+      "required": ["name", "icNo", "createdAt"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "HR Settings for the application.",
+      "type": "object",
+      "properties": {
+        "hrEmail": { "type": "string", "format": "email" },
+        "webhookUrl": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "User": {
+      "title": "User",
+      "description": "A user of the system (HR Admin).",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "applications": {
+      "schema": { "$ref": "#/entities/Application" },
+      "description": "Collection of submitted job applications."
+    },
+    "settings": {
+      "schema": { "$ref": "#/entities/Settings" },
+      "description": "Collection of global settings (usually a single document)."
+    },
+    "users": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Collection of authorized users (HR)."
+    }
+  }
+}
