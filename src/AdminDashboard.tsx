@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, doc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
-import { LogOut, Settings, Users, FileText, Search, Filter, X, ArrowLeft } from 'lucide-react';
+import { LogOut, Settings, Users, FileText, Search, Filter, X, ArrowLeft, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { JobApplicationForm } from './App';
 import { Link } from 'react-router-dom';
@@ -93,6 +93,19 @@ export default function AdminDashboard() {
       toast.error("Failed to save settings");
     } finally {
       setSavingSettings(false);
+    }
+  };
+
+  const handleDeleteApplicant = async (appId: string, applicantName: string) => {
+    if (window.confirm(`Are you sure you want to delete the application for ${applicantName}? This action cannot be undone.`)) {
+      try {
+        await deleteDoc(doc(db, 'applications', appId));
+        toast.success(`Application for ${applicantName} deleted successfully`);
+        fetchData(); // Refresh the list
+      } catch (error) {
+        console.error("Error deleting application:", error);
+        toast.error("Failed to delete application");
+      }
     }
   };
 
@@ -296,12 +309,21 @@ export default function AdminDashboard() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button 
-                          onClick={() => setSelectedApp(app)}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          View & Edit
-                        </button>
+                        <div className="flex justify-end space-x-3">
+                          <button 
+                            onClick={() => setSelectedApp(app)}
+                            className="text-blue-600 hover:text-blue-900"
+                          >
+                            View & Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteApplicant(app.id, app.fullName)}
+                            className="text-red-600 hover:text-red-900"
+                            title="Delete Applicant"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
