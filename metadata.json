@@ -1,5 +1,5 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Halagel Job Application",
+  "description": "A comprehensive job application form for Halagel Group of Companies that generates a PDF and sends it via email.",
   "requestFramePermissions": []
 }
