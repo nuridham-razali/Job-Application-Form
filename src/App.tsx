@@ -4,7 +4,8 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { PDFDocument } from 'pdf-lib';
 import { collection, addDoc, serverTimestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { ref, uploadString, getDownloadURL } from 'firebase/storage';
+import { db, storage } from './firebase';
 
 // ==========================================
 // REPLACE THIS WITH YOUR OWN BASE64 IMAGE
@@ -1042,6 +1043,7 @@ export function JobApplicationForm({ initialData, isAdmin, onSaveSuccess }: { in
     positionApplied: '',
     photoBase64: '',
     resumeBase64: '',
+    resumeUrl: '',
     
     // Personal
     fullName: '', newNric: '', oldNric: '', gender: '', age: '', race: '',
@@ -1153,9 +1155,23 @@ export function JobApplicationForm({ initialData, isAdmin, onSaveSuccess }: { in
   const handlePdfGenerated = async (blob: Blob) => {
     setStartPdfGeneration(false);
     try {
+      let finalResumeUrl = formData.resumeUrl || '';
+      
+      // Upload resume to Firebase Storage if a new one was selected
+      if (formData.resumeBase64 && formData.resumeBase64.startsWith('data:')) {
+        try {
+          const storageRef = ref(storage, `resumes/${Date.now()}_${Math.random().toString(36).substring(7)}`);
+          await uploadString(storageRef, formData.resumeBase64, 'data_url');
+          finalResumeUrl = await getDownloadURL(storageRef);
+        } catch (e) {
+          console.error("Error uploading resume to storage", e);
+        }
+      }
+
       if (isAdmin && initialData?.id) {
         // Update existing document
         const { id, createdAt, resumeBase64, ...updateData } = formData as any;
+        updateData.resumeUrl = finalResumeUrl;
         await updateDoc(doc(db, 'applications', initialData.id), updateData);
         
         // Trigger PDF download
@@ -1185,6 +1201,7 @@ export function JobApplicationForm({ initialData, isAdmin, onSaveSuccess }: { in
 
       // Save to Firestore first
       const { resumeBase64, ...firestoreData } = formData;
+      firestoreData.resumeUrl = finalResumeUrl;
       const docRef = await addDoc(collection(db, 'applications'), {
         ...firestoreData,
         status: 'Pending',
@@ -1743,13 +1760,19 @@ export function JobApplicationForm({ initialData, isAdmin, onSaveSuccess }: { in
                   type="file" 
                   accept="image/*,application/pdf" 
                   onChange={handleResumeUpload} 
-                  disabled={isAdmin}
                   className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" 
                 />
               </div>
+              {formData.resumeUrl && !formData.resumeBase64 && (
+                <div className="mt-4">
+                  <a href={formData.resumeUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline flex items-center">
+                    <CheckCircle2 className="w-4 h-4 mr-1" /> View Uploaded Resume
+                  </a>
+                </div>
+              )}
               {formData.resumeBase64 && (
                 <div className="mt-4">
-                  <p className="text-sm text-green-600 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1" /> Resume uploaded successfully</p>
+                  <p className="text-sm text-green-600 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1" /> New resume selected</p>
                 </div>
               )}
             </div>
