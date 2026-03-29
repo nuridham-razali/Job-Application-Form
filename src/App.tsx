@@ -2,6 +2,7 @@ import React, { Component, useState, useRef } from 'react';
 import { CheckCircle2, Plus, Trash2, FileText, X, Download, Check, Pen, Type, Image } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import { PDFDocument } from 'pdf-lib';
 import { collection, addDoc, serverTimestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -117,12 +118,12 @@ const formatDate = (dateString: string | undefined | null) => {
   return `${d}/${m}/${y}`;
 };
 
-const SamplePdfPreview = ({ formData, onClose, autoGenerate = false, onGenerated }: { formData: any, onClose?: () => void, autoGenerate?: boolean, onGenerated?: (base64: string) => void }) => {
+const SamplePdfPreview = ({ formData, onClose, autoGenerate = false, onGenerated }: { formData: any, onClose?: () => void, autoGenerate?: boolean, onGenerated?: (blob: Blob) => void }) => {
   const pdfRef = useRef<HTMLDivElement>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
-  const generatePdf = async (): Promise<string | null> => {
+  const generatePdf = async (): Promise<Blob | null> => {
     if (!pdfRef.current) return null;
     try {
       const pages = pdfRef.current.querySelectorAll('.pdf-page');
@@ -133,11 +134,11 @@ const SamplePdfPreview = ({ formData, onClose, autoGenerate = false, onGenerated
       for (let i = 0; i < pages.length; i++) {
         const page = pages[i] as HTMLElement;
         const canvas = await html2canvas(page, { 
-          scale: 2, 
+          scale: 1.5, 
           useCORS: true,
           backgroundColor: '#ffffff'
         });
-        const imgData = canvas.toDataURL('image/png');
+        const imgData = canvas.toDataURL('image/jpeg', 0.7);
         
         if (i > 0) {
           pdf.addPage();
@@ -155,10 +156,53 @@ const SamplePdfPreview = ({ formData, onClose, autoGenerate = false, onGenerated
           xOffset = (pdfWidth - finalWidth) / 2;
         }
 
-        pdf.addImage(imgData, 'PNG', xOffset, 0, finalWidth, finalHeight);
+        pdf.addImage(imgData, 'JPEG', xOffset, 0, finalWidth, finalHeight, undefined, 'FAST');
+      }
+
+      if (formData.resumeBase64 && !formData.resumeBase64.startsWith('data:application/pdf')) {
+        try {
+          pdf.addPage();
+          const imgProps = pdf.getImageProperties(formData.resumeBase64);
+          const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
+          let finalWidth = pdfWidth;
+          let finalHeight = imgHeight;
+          let xOffset = 0;
+
+          if (imgHeight > pdfHeight) {
+            const ratio = pdfHeight / imgHeight;
+            finalHeight = pdfHeight;
+            finalWidth = pdfWidth * ratio;
+            xOffset = (pdfWidth - finalWidth) / 2;
+          }
+          
+          const format = formData.resumeBase64.substring("data:image/".length, formData.resumeBase64.indexOf(";base64")).toUpperCase();
+          pdf.addImage(formData.resumeBase64, format === 'PNG' ? 'PNG' : 'JPEG', xOffset, 0, finalWidth, finalHeight, undefined, 'FAST');
+        } catch (e) {
+          console.error("Error attaching image resume", e);
+        }
       }
       
-      return pdf.output('datauristring');
+      let finalPdfBlob = pdf.output('blob');
+
+      if (formData.resumeBase64 && formData.resumeBase64.startsWith('data:application/pdf')) {
+        try {
+          const mainPdfBytes = await finalPdfBlob.arrayBuffer();
+          const mainPdfDoc = await PDFDocument.load(mainPdfBytes);
+          
+          const resumePdfBytes = Uint8Array.from(atob(formData.resumeBase64.split(',')[1]), c => c.charCodeAt(0));
+          const resumePdfDoc = await PDFDocument.load(resumePdfBytes);
+          
+          const copiedPages = await mainPdfDoc.copyPages(resumePdfDoc, resumePdfDoc.getPageIndices());
+          copiedPages.forEach((page) => mainPdfDoc.addPage(page));
+          
+          const mergedPdfBytes = await mainPdfDoc.save();
+          finalPdfBlob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+        } catch (e) {
+          console.error("Error attaching PDF resume", e);
+        }
+      }
+
+      return finalPdfBlob;
     } catch (error: any) {
       console.error('Error generating PDF:', error);
       return null;
@@ -169,8 +213,8 @@ const SamplePdfPreview = ({ formData, onClose, autoGenerate = false, onGenerated
     if (autoGenerate && onGenerated) {
       // Small delay to ensure rendering is complete
       setTimeout(async () => {
-        const base64 = await generatePdf();
-        if (base64) onGenerated(base64);
+        const blob = await generatePdf();
+        if (blob) onGenerated(blob as any);
       }, 500);
     }
   }, [autoGenerate]);
@@ -179,12 +223,14 @@ const SamplePdfPreview = ({ formData, onClose, autoGenerate = false, onGenerated
     setIsDownloading(true);
     setDownloadError(null);
     try {
-      const base64 = await generatePdf();
-      if (base64) {
+      const blob = await generatePdf();
+      if (blob) {
+        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.href = base64;
+        link.href = url;
         link.download = 'job_application.pdf';
         link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 100);
       } else {
         throw new Error('Failed to generate PDF');
       }
@@ -995,6 +1041,7 @@ export function JobApplicationForm({ initialData, isAdmin, onSaveSuccess }: { in
   const [formData, setFormData] = useState(initialData || {
     positionApplied: '',
     photoBase64: '',
+    resumeBase64: '',
     
     // Personal
     fullName: '', newNric: '', oldNric: '', gender: '', age: '', race: '',
@@ -1067,6 +1114,17 @@ export function JobApplicationForm({ initialData, isAdmin, onSaveSuccess }: { in
     }
   };
 
+  const handleResumeUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, resumeBase64: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   // Dynamic Array Handlers
   const handleArrayChange = (index: number, field: string, value: string, arrayName: 'familyMembers' | 'education' | 'experience') => {
     const newArray = [...formData[arrayName]] as any[];
@@ -1092,19 +1150,21 @@ export function JobApplicationForm({ initialData, isAdmin, onSaveSuccess }: { in
     setStartPdfGeneration(true);
   };
 
-  const handlePdfGenerated = async (base64: string) => {
+  const handlePdfGenerated = async (blob: Blob) => {
     setStartPdfGeneration(false);
     try {
       if (isAdmin && initialData?.id) {
         // Update existing document
-        const { id, createdAt, ...updateData } = formData as any;
+        const { id, createdAt, resumeBase64, ...updateData } = formData as any;
         await updateDoc(doc(db, 'applications', initialData.id), updateData);
         
         // Trigger PDF download
+        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.href = base64;
+        link.href = url;
         link.download = `Permohonan_Kerja_${formData.fullName.replace(/\s+/g, '_')}.pdf`;
         link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 100);
         
         setIsSubmitting(false);
         if (onSaveSuccess) onSaveSuccess();
@@ -1124,8 +1184,9 @@ export function JobApplicationForm({ initialData, isAdmin, onSaveSuccess }: { in
       }
 
       // Save to Firestore first
+      const { resumeBase64, ...firestoreData } = formData;
       const docRef = await addDoc(collection(db, 'applications'), {
-        ...formData,
+        ...firestoreData,
         status: 'Pending',
         createdAt: serverTimestamp()
       });
@@ -1133,19 +1194,10 @@ export function JobApplicationForm({ initialData, isAdmin, onSaveSuccess }: { in
       // Send Email via Web3Forms if configured
       if (accessKey) {
         try {
-          // Convert base64 to Blob
-          const base64Data = base64.split(',')[1];
-          const byteCharacters = atob(base64Data);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-          const byteArray = new Uint8Array(byteNumbers);
-          const blob = new Blob([byteArray], { type: 'application/pdf' });
           const file = new File([blob], `Permohonan_Kerja_${formData.fullName.replace(/\s+/g, '_')}.pdf`, { type: 'application/pdf' });
 
           const emailFormData = new FormData();
-          emailFormData.append("access_key", accessKey);
+          emailFormData.append("access_key", accessKey.trim());
           emailFormData.append("subject", `New Job Application: ${formData.fullName}`);
           emailFormData.append("name", formData.fullName);
           emailFormData.append("email", formData.email || "no-reply@example.com");
@@ -1682,7 +1734,28 @@ export function JobApplicationForm({ initialData, isAdmin, onSaveSuccess }: { in
             </div>
           </Section>
 
-          {/* 9. Declaration */}
+          {/* 9. Resume / CV */}
+          <Section titleMs="Resume / CV" titleEn="Resume / CV">
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-gray-800 mb-2">Muat Naik Resume / Upload Resume (PDF or Image)</label>
+              <div className="flex items-center space-x-4">
+                <input 
+                  type="file" 
+                  accept="image/*,application/pdf" 
+                  onChange={handleResumeUpload} 
+                  disabled={isAdmin}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" 
+                />
+              </div>
+              {formData.resumeBase64 && (
+                <div className="mt-4">
+                  <p className="text-sm text-green-600 flex items-center"><CheckCircle2 className="w-4 h-4 mr-1" /> Resume uploaded successfully</p>
+                </div>
+              )}
+            </div>
+          </Section>
+
+          {/* 10. Declaration */}
           <Section titleMs="Perakuan" titleEn="Declaration">
             <div className="text-sm text-gray-700 space-y-2 mb-6">
               <p>Adalah dengan ini saya mengesahkan bahawa: / <i>I hereby verified that:</i></p>
