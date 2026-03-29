@@ -58,6 +58,7 @@
         
         "status": { "type": "string", "enum": ["pending", "kiv", "accept", "reject"] },
         "pdfUrl": { "type": "string" },
+        "resumeUrl": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
         
         "officeUse": {
