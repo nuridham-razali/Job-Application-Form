@@ -6,6 +6,7 @@ import { PDFDocument } from 'pdf-lib';
 import { collection, addDoc, serverTimestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { db, storage } from './firebase';
+import toast from 'react-hot-toast';
 
 // ==========================================
 // REPLACE THIS WITH YOUR OWN BASE64 IMAGE
@@ -1163,8 +1164,11 @@ export function JobApplicationForm({ initialData, isAdmin, onSaveSuccess }: { in
           const storageRef = ref(storage, `resumes/${Date.now()}_${Math.random().toString(36).substring(7)}`);
           await uploadString(storageRef, formData.resumeBase64, 'data_url');
           finalResumeUrl = await getDownloadURL(storageRef);
-        } catch (e) {
+        } catch (e: any) {
           console.error("Error uploading resume to storage", e);
+          toast.error(`Failed to upload resume: ${e.message || "Unknown error"}`);
+          setIsSubmitting(false);
+          return; // Stop submission if resume upload fails
         }
       }
 
